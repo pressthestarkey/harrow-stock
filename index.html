@@ -148,53 +148,55 @@
     <script>
         async function fetchStockPrice() {
             try {
-                const API_KEY = 'XYQC5A0855L0CX63';
+                const API_KEY = 'GtdNpa2mGUeJksRMEGiaQkvC1C478_ft';
                 const symbol = 'HROW';
                 
-                const response = await fetch('https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=' + symbol + '&interval=1min&apikey=' + API_KEY);
-                const data = await response.json();
+                // Get previous day's close for comparison
+                const prevCloseResponse = await fetch(`https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${API_KEY}`);
+                const prevCloseData = await prevCloseResponse.json();
                 
-                if (data['Time Series (1min)']) {
-                    const timeSeries = data['Time Series (1min)'];
-                    const latestTime = Object.keys(timeSeries)[0];
-                    const latestData = timeSeries[latestTime];
+                // Get current snapshot with latest price
+                const snapshotResponse = await fetch(`https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${symbol}?apiKey=${API_KEY}`);
+                const snapshotData = await snapshotResponse.json();
+                
+                if (snapshotData.status === 'OK' && snapshotData.ticker) {
+                    const ticker = snapshotData.ticker;
+                    const currentPrice = ticker.day?.c || ticker.prevDay?.c || ticker.lastTrade?.p;
+                    const prevClose = prevCloseData.results?.[0]?.c || ticker.prevDay?.c;
                     
-                    const price = parseFloat(latestData['4. close']);
-                    const open = parseFloat(latestData['1. open']);
-                    const change = price - open;
-                    const changePercent = ((change / open) * 100).toFixed(2) + '%';
-                    
-                    document.getElementById('stockPrice').textContent = '$' + price.toFixed(2);
-                    document.getElementById('stockPrice').classList.remove('loading');
-                    
-                    const changeElement = document.getElementById('priceChange');
-                    const changeText = (change >= 0 ? '+' : '') + change.toFixed(2) + ' (' + changePercent + ')';
-                    changeElement.textContent = changeText;
-                    changeElement.className = 'price-change ' + (change >= 0 ? 'positive' : 'negative');
-                    
-                    const now = new Date();
-                    document.getElementById('lastUpdated').textContent = 'Last updated: ' + now.toLocaleTimeString();
-                } else if (data['Note']) {
-                    document.getElementById('stockPrice').textContent = 'Rate Limit';
-                    document.getElementById('priceChange').textContent = 'API limit reached';
+                    if (currentPrice && prevClose) {
+                        const change = currentPrice - prevClose;
+                        const changePercent = ((change / prevClose) * 100).toFixed(2);
+                        
+                        document.getElementById('stockPrice').textContent = '$' + currentPrice.toFixed(2);
+                        document.getElementById('stockPrice').classList.remove('loading');
+                        
+                        const changeElement = document.getElementById('priceChange');
+                        const changeText = (change >= 0 ? '+' : '') + change.toFixed(2) + ' (' + (change >= 0 ? '+' : '') + changePercent + '%)';
+                        changeElement.textContent = changeText;
+                        changeElement.className = 'price-change ' + (change >= 0 ? 'positive' : 'negative');
+                        
+                        const now = new Date();
+                        document.getElementById('lastUpdated').textContent = 'Last updated: ' + now.toLocaleTimeString();
+                    } else {
+                        throw new Error('Price data not available');
+                    }
                 } else {
                     throw new Error('Unable to fetch stock data');
                 }
             } catch (error) {
                 console.error('Error:', error);
                 document.getElementById('stockPrice').textContent = 'Error';
-                document.getElementById('priceChange').textContent = 'Unable to fetch data';
+                document.getElementById('stockPrice').classList.remove('loading');
+                document.getElementById('priceChange').textContent = 'Unable to fetch data: ' + error.message;
             }
         }
         
+        // Fetch immediately on load
         fetchStockPrice();
+        
+        // Refresh every 5 minutes (300000 milliseconds)
         setInterval(fetchStockPrice, 300000);
     </script>
 </body>
-
 </html>
-
-
-
-
-
